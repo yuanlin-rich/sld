@@ -1,4 +1,7 @@
+# 将文本提示中的抽象描述转化为对边界框列表的数学判断。
+
 import numpy as np
+# inflect用于将数字和名词在单复数形式与文本表示之间进行精确转换，确保文本匹配的逻辑一致性
 import inflect
 import re
 
@@ -7,6 +10,7 @@ p = inflect.engine()
 
 # Credit: GPT
 def find_word_after(text, word):
+    # 寻找一个完整的 word，它后面必须跟着至少一个空白符，然后捕获之后直到行尾的所有内容
     pattern = r"\b" + re.escape(word) + r"\s+(.+)"
     match = re.search(pattern, text)
     if match:
@@ -14,10 +18,11 @@ def find_word_after(text, word):
     else:
         return None
 
-
+# 从英文数字单词到对应整数的映射字典，是连接“人类语言描述的数量”与“计算机可计算数字”的关键桥梁
 word_to_num_mapping = {p.number_to_words(i): i for i in range(1, 21)}
 
 # New predicates that use the center
+# 评估图像中两个物体的相对位置
 locations_xyxy = {
     ('left', 'right'): (lambda box1, box2: (box1[0] + box1[2]) < (box2[0] + box2[2])),
     ('right', 'left'): (lambda box1, box2: (box1[0] + box1[2]) > (box2[0] + box2[2])),
@@ -34,6 +39,7 @@ locations_xywh = {
 
 
 def singular(noun):
+    # 将输入的名次转换为单数形式
     singular_noun = p.singular_noun(noun)
     if singular_noun is False:
         return noun
@@ -41,6 +47,8 @@ def singular(noun):
 
 
 def get_box(gen_boxes, name_include):
+    # 在物体检测结果列表 gen_boxes 中
+    # 找出第一个其名称包含或匹配给定查询词列表 name_include 中任意一项的物体，并返回这个完整的物体信息字典
     # This prevents substring match on non-word boundaries: carrot vs car
     box_match = [any([((name_include_item + ' ') in box['name'] or box['name'].endswith(name_include_item))
                      for name_include_item in name_include]) for box in gen_boxes]
@@ -53,6 +61,7 @@ def get_box(gen_boxes, name_include):
 
 
 def count(gen_boxes, name_include):
+    # 统计特定物体出现次数的核心工具，它高效地统计了检测结果中与查询词匹配的物体数量。
     return sum([
         any([name_include_item in box['name'] for name_include_item in name_include]) for box in gen_boxes
     ])
@@ -60,6 +69,7 @@ def count(gen_boxes, name_include):
 
 def predicate_numeracy(query_names, intended_count, gen_boxes, verbose=False):
     # gen_boxes: dict with keys 'name' and 'bounding_box'
+    # 检查图像中特定物体的数量是否正确
     object_count = count(gen_boxes, name_include=query_names)
     if verbose:
         print(
@@ -83,6 +93,7 @@ def predicate_numeracy_2obj(query_names1, intended_count1, query_names2, intende
 
 def predicate_attribution(query_names1, query_names2, modifier1, modifier2, intended_count1, intended_count2, gen_boxes, verbose=False):
     # gen_boxes: dict with keys 'name' and 'bounding_box'
+    # 检查物体的属性（如颜色、材质）是否正确绑定。
     if modifier1:
         query_names1 = [f"{modifier1} {item}" for item in query_names1]
     object_count1 = count(gen_boxes, name_include=query_names1)
@@ -103,6 +114,7 @@ def predicate_attribution(query_names1, query_names2, modifier1, modifier2, inte
 
 def predicate_spatial(query_names1, query_names2, verify_fn, gen_boxes, verbose=False):
     # gen_boxes: dict with keys 'name' and 'bounding_box'
+    # 检查两个物体之间的相对位置（如左右、上下）是否正确
 
     object_box1 = get_box(gen_boxes, query_names1)
     object_box2 = get_box(gen_boxes, query_names2)
