@@ -1,3 +1,6 @@
+# stable diffusion (SD) 模型的核心加载与文本编码模块
+# 为后续的图像生成、编辑或SLD框架的潜在空间操作提供基础模型能力和文本理解
+
 import torch
 from transformers import CLIPTextModel, CLIPTokenizer
 from diffusers import AutoencoderKL, DDIMScheduler, DDIMInverseScheduler, DPMSolverMultistepScheduler
@@ -14,6 +17,7 @@ sd_version = ""
 model_dict = None
 
 def load_sd(key="runwayml/stable-diffusion-v1-5", use_fp16=False, load_inverse_scheduler=True, use_dpm_multistep_scheduler=False, scheduler_cls=None):
+    # 加载sd模型
     """
     Keys:
      key = "CompVis/stable-diffusion-v1-4"
@@ -63,6 +67,7 @@ def load_sd(key="runwayml/stable-diffusion-v1-5", use_fp16=False, load_inverse_s
     return model_dict
 
 def encode_prompts(tokenizer, text_encoder, prompts, negative_prompt="", return_full_only=False, one_uncond_input_only=False):
+    # 将文本提示词（和负面提示词）转换为U-Net能够使用的条件嵌入向量
     if negative_prompt == "":
         print("Note that negative_prompt is an empty string")
     
@@ -91,6 +96,7 @@ def encode_prompts(tokenizer, text_encoder, prompts, negative_prompt="", return_
     return text_embeddings, uncond_embeddings, cond_embeddings
 
 def process_input_embeddings(input_embeddings):
+    # 兼容性处理函数，确保不同格式的嵌入输入都能被统一处理
     assert isinstance(input_embeddings, (tuple, list))
     if len(input_embeddings) == 3:
         # input_embeddings: text_embeddings, uncond_embeddings, cond_embeddings
