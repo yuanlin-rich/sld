@@ -216,6 +216,9 @@ def generate_semantic_guidance(
     object_positions: object indices in text tokens
     return_cross_attn: should be deprecated. Use `return_saved_cross_attn` and the new format.
     """
+    # 实现“按描述修正”的核心
+    # 在扩散去噪的每一步，计算当前生成内容与目标（由bboxes和phrases定义）的差异
+    # 生成一个损失 (loss)，并通过梯度反传来微调潜空间 (latents)
     vae, tokenizer, text_encoder, unet, scheduler, dtype = (
         model_dict.vae,
         model_dict.tokenizer,
@@ -523,6 +526,7 @@ def generate_gligen(
         Enabled: bboxes and phrases should be a list (batch dimension) of items (specify the bboxes/phrases of each image in the batch).
         Disabled: bboxes and phrases should be a list of bboxes and phrases specifying the bboxes/phrases of one image (no batch dimension).
     """
+    # 利用 GLIGEN 模型，将边界框 (bboxes) 和短语 (phrases) 作为条件直接注入U-Net的交叉注意力层，实现对物体生成位置的硬约束
     vae, tokenizer, text_encoder, unet, scheduler, dtype = (
         model_dict.vae,
         model_dict.tokenizer,
@@ -945,6 +949,7 @@ def invert(
 
     returns inverted_latents for all time steps
     """
+    # 将一张现有图像“反推”回其扩散过程的潜在空间轨迹。这是实现“修正”的第一步，让你能在原图的“制造过程”中插入修改
     vae, tokenizer, text_encoder, unet, scheduler, inverse_scheduler, dtype = (
         model_dict.vae,
         model_dict.tokenizer,
@@ -1026,6 +1031,7 @@ def generate_partial_frozen(
     offload_guidance_cross_attn_to_cpu=False,
     use_boxdiff=False,
 ):
+    # 在已知潜空间轨迹 (latents_all) 的基础上，通过“冻结掩码” (frozen_mask) 来保护图像中不需要修改的部分
     vae, tokenizer, text_encoder, unet, scheduler, dtype = (
         model_dict.vae,
         model_dict.tokenizer,
