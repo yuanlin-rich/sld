@@ -1,3 +1,6 @@
+# 就是根据提示词，生成判断图像的生成结果的评判工具
+# 这里的函数生成（试题，评分标准）
+
 import re
 import numpy as np
 from functools import partial
@@ -12,9 +15,11 @@ def get_eval_info_from_prompt_lmd(prompt):
     """
     Note: object_name needs to be a substring of each item in texts to make `count` and `get_box` in the predicate work
     """
+    # 最关键的动态解析函数。
+    # 根据提示词prompt的文本特征（关键词），判断其属于哪类任务，并提取关键信息，绑定对应的评估逻辑
     if 'without' in prompt:
         # negation
-
+        # 否定类提示词
         pattern = f"without (.+)"
         match = re.search(pattern, prompt)
         object_name = match.group(1)
@@ -26,6 +31,7 @@ def get_eval_info_from_prompt_lmd(prompt):
         eval_info = {"type": "negation", "predicate": predicate}
     elif 'on the left' in prompt or 'on the right' in prompt or 'on the top' in prompt or 'on the bottom' in prompt:
         # spatial
+        # 空间提示词
         pattern = f"with (.+) on the (.+) and (.+) on the (.+)"
         match = re.search(pattern, prompt)
         print("prompt:", prompt)
@@ -39,6 +45,7 @@ def get_eval_info_from_prompt_lmd(prompt):
         predicate = partial(predicate_spatial, query_names1, query_names2, verify_fn)
         eval_info = {"type": "spatial", "location1": location1, "location2": location2, "predicate": predicate}
     elif 'and' in prompt: # no spatial keyword
+        # 数量提示词
         if 'one' in prompt or 'two' in prompt or 'three' in prompt or 'four' in prompt or 'five' in prompt:
             # numeracy 2obj
             pattern = f"with (.+) (.+) and (.+) (.+)"
@@ -75,6 +82,7 @@ def get_eval_info_from_prompt_lmd(prompt):
             predicate = partial(predicate_attribution, query_names1, query_names2, modifier1, modifier2, intended_count1, intended_count2)
             eval_info = {"type": "attribution", "object_name1": object_name1, "object_name2": object_name2, "predicate": predicate}
     elif 'with' in prompt: # with number words
+        # 数量提示词
         # numeracy
         pattern = f"with (.+) (.+)"
         match = re.search(pattern, prompt)
