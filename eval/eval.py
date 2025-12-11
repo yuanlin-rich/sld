@@ -1,9 +1,13 @@
+# 判断生成结果是否真正的符合标准
+# 给定一条提示词和一张图像，调用检测器分析图像，然后使用与该提示词绑定的专属评估函数进行判决
+
 import numpy as np
 from PIL import Image
 import torch
 from transformers import Owlv2Processor, Owlv2ForObjectDetection
 
 def get_eval_info_from_prompt(prompt, prompt_type):
+    # 解析提示词，获取“评分标准
     if prompt_type.startswith("lmd"):
         from .lmd import get_eval_info_from_prompt_lmd
         return get_eval_info_from_prompt_lmd(prompt)
@@ -121,6 +125,8 @@ def to_gen_box_format(box, width, height):
 @torch.no_grad()
 def eval_prompt(p, path, evaluator, prim_score_threshold = 0.2, attr_score_threshold=0.45,
                 nms_threshold = 0.5, use_class_aware_nms=False, verbose=False, use_cuda=True):
+    # 那个真正将提示词和图像作为输入，并输出最终判决的核心函数
+    # 返回每一个评价标准的判决结果
     texts, eval_info = get_eval_info_from_prompt(p, "lmd")
     eval_type = eval_info["type"]
     if eval_type == "attribution":
@@ -184,6 +190,7 @@ def eval_prompt(p, path, evaluator, prim_score_threshold = 0.2, attr_score_thres
 
 class Evaluator:
     def __init__(self):
+        # Owlv2Processor负责检测图像中的物体
         self.processor = Owlv2Processor.from_pretrained("google/owlv2-base-patch16-ensemble")
         self.model = Owlv2ForObjectDetection.from_pretrained(
             "google/owlv2-base-patch16-ensemble"
