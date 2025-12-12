@@ -1,3 +1,7 @@
+# 1）处理提示词，给出提示词期望的结果
+# 2）评价图像和期望结果之间的差距
+# 3）根据图像和期望结果之间的差距，给出修改建议
+
 import numpy as np
 
 import torch
@@ -9,6 +13,7 @@ from utils.parse import p
 
 
 def check_same_object(box1, box2, iou_threshold=0.9):
+    # 检测是否是同一个物体，实际上就是计算交集区域和并集区域的面积比例
     x1, y1, w1, h1 = box1
     x2, y2, w2, h2 = box2
     # Calculate the coordinates of the intersection rectangle
@@ -36,12 +41,17 @@ def check_same_object(box1, box2, iou_threshold=0.9):
     # print("IoU = ", iou, flush=True)
     # print(iou)
     if iou > iou_threshold:
+        # 交集区域和并集区域的面积比例大于0.9，认为是同一个物体
         return True
     else:
+        # 否则不是同一个物体
         return False
 
 
 def pop_entry_via_name(obj_name, det_list):
+    # obj_name如果能对应到det_list中的某一项
+    # 1）从det_list删除这一项
+    # 2）返回det_list的这一项
     for idx, obj in enumerate(det_list):
         if obj_name == obj[0]:
             ret = det_list[idx]
@@ -51,6 +61,9 @@ def pop_entry_via_name(obj_name, det_list):
 
 
 def pop_entry_via_box(bbox, det_list):
+    # 根据包围盒子判断bbox能否对应到到det_list中的某一项
+    # 1）从det_list删除这一项
+    # 2）返回det_list的这一项
     for idx, obj in enumerate(det_list):
         if bbox[0] == obj[0] and check_same_object(bbox[1], obj[1]) is True:
             ret = det_list[idx]
@@ -60,6 +73,9 @@ def pop_entry_via_box(bbox, det_list):
 
 
 def peak_bbox_via_name(target_base_name, det_results):
+    # 通过name
+    # 1）从det_list删除这一项
+    # 2）返回det_list的这一项
     return_list = []
     for obj in det_results:
         base_name = obj[0].split(" #")[0]
@@ -74,14 +90,29 @@ def class_aware_nms(
     """
     This NMS processes boxes of each label individually.
     """
+    # bounding_boxes：检测到的所有框的坐标。
+    # confidence_score：每个框对应的置信度（分数，0-1之间）。
+    # labels：每个框对应的类别标签（如 0代表“猫”，1代表“椅子”）。
+    # threshold：NMS的IoU阈值。两个同类别框的IoU超过此阈值，则保留高分框，抑制低分框。
+
+    # 返回：
+    # picked_boxes，经过筛选后保留的边界框坐标，如[x_min, y_min, x_max, y_max] 或 [x_min, y_min, width, height]
+    # picked_score，每个被保留框对应的置信度分数。分数越高，表示检测器对该结果越确信，如0.98
+    # picked_labels，每个被保留框对应的类别标签（整数索引）。这个索引需要对照类别名称列表才知道具体是什么物体，如(可能代表“猫”)
+
     # If no bounding boxes, return empty list
     if len(bounding_boxes) == 0:
         return np.array([]), np.array([]), np.array([])
 
     picked_boxes, picked_score, picked_labels = [], [], []
 
+    # 找出所有不重复的类别标签
     labels_unique = np.unique(labels)
     for label in labels_unique:
+        # 对每个类别处理
+        # 通过列表推导式，筛选出属于当前 label 的所有框、分数。
+        # 为这些框创建临时的标签列表 labels_label。
+        # 调用基础的 nms 函数（此函数在代码中已定义，但未在此处展示）对该类别的框进行去重。
         bounding_boxes_label = [
             bounding_box
             for i, bounding_box in enumerate(bounding_boxes)
@@ -128,11 +159,21 @@ class Detector:
         """
         Register objects and their attributes from the given object lists.
         """
+        # 拿到LLM解析出的“设计图纸”（提示词和要求），生成一份“愿望清单”，希望图像生成结果符合“愿望清单”
+        # object_lists例子：[['motorcycle', ['green', 'blue']], ['raccoon', [None]]]
         # Reset class variables
         self.prompt = prompt
+
+        # 格式如[['motorcycle', ['green', 'blue']], ['raccoon', [None]]]
         self.object_lists = object_lists
+
+        # 数量
         self.primitive_count_dict = {}
+
+        # 属性
         self.attribute_count_dict = {}
+
+
         self.pred_primitive_count_dict = {}
         self.pred_attribute_count_dict = {}
 
@@ -153,8 +194,13 @@ class Detector:
                     )
                     self.pred_attribute_count_dict[real_key] = 0
             if ask_attribute is False:
+                # 对物体属性没有要求
+                # 表示不限属性的物体数量
                 self.primitive_count_dict[key] = len(values)
             else:
+                # 对于这种有属性要求的物体
+                # primitive_count_dict 中 ‘motorcycle‘ 的值被设为 -1
+                # 表示“数量不由我单独控制，而是由具体的属性物体共同满足
                 self.primitive_count_dict[key] = -1
         # print(self.primitive_count_dict)  # {'princess': 2, 'dwarf': 1}
         # print(self.attribute_count_dict)  # {('princess', 'pink'): 2, ('dwarf', 'blue'): 1}
@@ -170,10 +216,23 @@ class Detector:
         Take detection result and llm suggestions (two lists) as input,
         prase them into four categories: add / move / remove / change attr
         """
+        # 对比“当前产品”（检测结果）和“设计图纸”（LLM的理想布局），找出所有错误点
+        # 它通过集合运算和几何比较，精确诊断出图像现状 (det_results) 与理想布局 (llm_suggestions) 之间的差异，
+        # 并输出五种具体的修正操作
+
+        # 现状
         key_curr = set([obj[0] for obj in det_results])
+
+        # 目标
         key_goal = set([obj[0] for obj in llm_suggestions])
+
+        # 提示词要求但图中没有的物体。可能是全新添加，也可能是现有物体需要修改属性
         add_keys = key_goal - key_curr  # Add / Change Attr
+
+        # 图中有但目标中不需要的物体。需要删除
         sub_keys = key_curr - key_goal  # Remove / Change Attr
+
+        # 名称相同的物体。它们可能位置对了（保留），也可能需要移动
         same_keys = key_curr.intersection(key_goal)  # Possible Move
 
         remove_objects = []
@@ -215,6 +274,7 @@ class Detector:
             remove_objects.append(tuple(entry))
 
         # Check attribute change
+        # 返回物种空间调整指令，保留物体，删除物体，添加物体，移动物体，改变物体属性
         return preserve_objects, remove_objects, add_objects, move_objects, change_attr_object
 
     def summarize_result(self, attribute_objects, primitive_objects):
@@ -228,6 +288,9 @@ class Detector:
         Returns:
             list: A list of tuples representing the final result, where each tuple contains the object name and its corresponding bbox.
         """
+        # 将两批原始的、未区分的检测结果 (attribute_objects, primitive_objects)
+        # 按照之前注册的“期望清单”，整理成一份格式完美、可供下游评估函数 (predicate_*) 直接使用的报告
+        # 最终生成结果[(“green motorcycle #1“, [bbox]), (“motorcycle #2“, [bbox])]
         # walk through attribute dict
         attribute_results = {}
         primitive_results = {}

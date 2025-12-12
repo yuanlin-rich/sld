@@ -1,3 +1,6 @@
+# 这段代码实现了一个基于stable diffusion和gligen的图像生成系统
+# 主要用于在现有图像上添加、移动、修改或移除对象
+
 import torch
 import models
 import utils
@@ -27,6 +30,8 @@ version = "sld"
 height = 512  # default height of Stable Diffusion
 width = 512  # default width of Stable Diffusion
 H, W = height // 8, width // 8  # size of the latent
+
+# 分类器无引导尺度
 guidance_scale = 2.5  # Scale for classifier-free guidance
 
 # batch size: set to 1
@@ -45,26 +50,35 @@ offload_cross_attn_to_cpu = False
 
 
 def generate_single_object_with_box(
-    prompt,
-    box,
-    phrase,
-    word,
-    input_latents,
-    input_embeddings,
-    semantic_guidance_kwargs,
-    obj_attn_key,
-    saved_cross_attn_keys,
-    sam_refine_kwargs,
-    num_inference_steps,
-    gligen_scheduled_sampling_beta=0.3,
-    verbose=False,
-    visualize=True,
+    prompt,                                 # 字符串，描述整个场景的提示词，例如："a dog and a cat"
+    box,                                    # 元组，表示边界框，格式为 (x_min, y_min, x_max, y_max)（在512x512的图像上）
+    phrase,                                 # 字符串，描述对象的短语，例如："a dog"
+    word,                                   # 字符串，对象的核心词，例如："dog"
+    input_latents,                          # 初始的噪声潜在表示
+    input_embeddings,                       # 文本嵌入，包括无条件嵌入和条件嵌入
+    semantic_guidance_kwargs,               # 用于语义引导的参数字典
+    obj_attn_key,                           # 用于保存和检索交叉注意力的键，例如 ("down", 2, 1, 0)
+    saved_cross_attn_keys,                  # 需要保存的交叉注意力键的列表
+    sam_refine_kwargs,                      # SAM细化掩码的参数字典
+    num_inference_steps,                    # 去噪步骤数
+    gligen_scheduled_sampling_beta=0.3,     # GLIGEN的调度采样参数，控制边界框条件注入的时间
+    verbose=False,                          # 是否打印详细信息
+    visualize=True,                         # 是否生成可视化图像
     **kwargs,
 ):
+    # 为单个对象生成图像，流程：
+    # 1）文本处理：获取提示词中特定短语的 token 位置
+    # 2）GLIGEN 生成：使用边界框引导生成单个对象
+    # 3）SAM 优化：使用 SAM（Segment Anything Model）细化对象掩码
+    # 4）返回结果：潜在表示、掩码、注意力图、标注图像
+
+    # # 将单个对象参数转换为列表格式
     bboxes, phrases, words = [box], [phrase], [word]
 
     if verbose:
         print(f"Getting token map (prompt: {prompt})")
+    
+    # # 获取短语在提示词中的位置索引
     object_positions, word_token_indices = guidance.get_phrase_indices(
         tokenizer=tokenizer,
         prompt=prompt,
@@ -79,6 +93,7 @@ def generate_single_object_with_box(
     # phrases only has one item, so we select the first item in word_token_indices
     word_token_index = word_token_indices[0]
 
+    # GLIGEN单对象生成阶段
     if verbose:
         print("word_token_index:", word_token_index)
     (
@@ -112,10 +127,12 @@ def generate_single_object_with_box(
     )
     # `saved_cross_attn_keys` kwargs may have duplicates
 
+    # 释放显存，防止oom
     utils.free_memory()
 
     single_object_pil_image_box_ann = single_object_pil_images_box_ann[0]
 
+    # SAM掩码细化阶段
     if visualize:
         print("Single object image")
         vis.display(single_object_pil_image_box_ann)
@@ -128,13 +145,11 @@ def generate_single_object_with_box(
     )
 
     mask_selected_tensor = torch.tensor(mask_selected)
-
-
     return (
-        latents_all,
-        mask_selected_tensor,
-        saved_attns,
-        single_object_pil_image_box_ann,
+        latents_all,                        # 所有时间步的潜在表示序列，从初始噪声到最终生成图像的完整去噪过程记录
+        mask_selected_tensor,               # 精细分割的对象掩码
+        saved_attns,                        # 保存的交叉注意力图
+        single_object_pil_image_box_ann,    # 带标注的可视化图像
     )
 
 
@@ -145,6 +160,7 @@ def get_masked_latents_all_list(
     verbose=False,
     **kwargs,
 ):
+    # 多个对象分别生成单对象图像和相关数据
     latents_all_list, mask_tensor_list, saved_attns_list, so_img_list = [], [], [], []
 
     if not so_prompt_phrase_word_box_list:
@@ -184,6 +200,7 @@ def get_masked_latents_all_list(
 
 
 def convert_box(box):
+    # 转换包围盒的格式
     # box: x, y, w, h (in 512 format) -> x_min, y_min, x_max, y_max
     x_min, y_min = box[0], box[1]
     w_box, h_box = box[2], box[3]
