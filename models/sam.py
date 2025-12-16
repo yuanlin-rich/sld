@@ -1,3 +1,6 @@
+# sam（segment anything model）的集成和细化工具
+# 用于从粗糙的注意力掩码或边界框中提取精确的分割掩码。
+
 import gc
 import matplotlib.pyplot as plt
 import numpy as np
@@ -12,6 +15,7 @@ from scipy import ndimage
 
 
 def load_sam():
+    # 加载sam模型
     sam_model = SamModel.from_pretrained("facebook/sam-vit-huge").to(torch_device)
     sam_processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
 
@@ -31,6 +35,7 @@ def sam(
     return_numpy=True,
 ):
     """target_mask_shape: (h, w)"""
+    # 分割函数，支持点提示，框提示等多种提示方式
     sam_model, sam_processor = (
         sam_model_dict["sam_model"],
         sam_model_dict["sam_processor"],
@@ -50,13 +55,18 @@ def sam(
 
     with torch.no_grad():
         with torch.autocast(torch_device):
+            # 预处理图像和提示
             inputs = sam_processor(
                 image,
                 input_points=input_points,
                 input_boxes=input_boxes,
                 return_tensors="pt",
             ).to(torch_device)
+            
+            # 运行sam模型
             outputs = sam_model(**inputs)
+
+        # 后处理掩码
         masks = sam_processor.image_processor.post_process_masks(
             outputs.pred_masks.cpu().float(),
             inputs["original_sizes"].cpu(),
@@ -117,6 +127,8 @@ def select_mask(
     verbose=False,
 ):
     """masks: numpy bool array"""
+    # 掩码选择和优化
+    # 只能选择最佳掩码
     mask_sizes = masks.sum(axis=(1, 2))
 
     # Another possible rule: iou with the attention mask
@@ -207,6 +219,7 @@ def sam_refine_attn(
     discourage_mask_below_coarse_iou,
     verbose,
 ):
+    # 从注意力图生成精确掩码
     # token_attn_np is for visualizations
     token_attn_np_smooth = ndimage.gaussian_filter(
         token_attn_np.astype(float), sigma=gaussian_sigma
@@ -296,6 +309,7 @@ def sam_refine_attn(
 
 def sam_refine_box(sam_input_image, box, *args, **kwargs):
     # One image with one box
+    # 从边界框生成精确掩码
 
     sam_input_images, boxes = [sam_input_image], [[box]]
     mask_selected_batched_list, conf_score_selected_batched_list = sam_refine_boxes(
