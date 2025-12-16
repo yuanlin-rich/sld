@@ -1,3 +1,5 @@
+# 注意力引导（Attention Guidance）的核心实现，主要用于扩散模型中通过注意力图控制物体位置
+
 import torch
 import torch.nn.functional as F
 import math
@@ -9,6 +11,7 @@ import utils
 
 # A list mapping: prompt index to str (prompt in a list of token str)
 def get_token_map(tokenizer, prompt, verbose=False, padding="do_not_pad"):
+    # 将文本prompt转换为token列表
     fg_prompt_tokens = tokenizer(
         [prompt], padding=padding, max_length=77, return_tensors="np"
     )
@@ -44,6 +47,8 @@ def get_phrase_indices(
     add_suffix_if_not_found=False,
 ):
     # TODO: It sometimes causes weird prompts...
+
+    # 找到指定短语在prompt中的token位置
        
     for obj in phrases:
         # Suffix the prompt with object name for attention guidance if object is not in the prompt, using "|" to separate the prompt and the suffix
@@ -142,6 +147,8 @@ def add_ca_loss_per_attn_map_to_loss(
     fg_top_p, bg_top_p, fg_weight, and bg_weight are only used with max-based loss
     """
 
+    # 计算基础注意力损失
+
     # Uncomment to debug:
     # print(fg_top_p, bg_top_p, fg_weight, bg_weight)
 
@@ -226,6 +233,10 @@ def add_ref_ca_loss_per_attn_map_to_lossv2(
 
     `ref_ca_saved_attn` should have the same structure as bboxes and object_positions (until the inner content, which should be similar to saved_attn).
     """
+    # 参考注意力匹配损失
+    # 参考注意力：先生成单个物体的图像，保存其注意力图
+    # 目标匹配：在组合生成时，使注意力图与参考注意力图相似
+    # 增强一致性：确保每个物体保持原有的外观特征
 
     if loss_weight == 0.0:
         # Skip computing the reference loss if the loss weight is 0.

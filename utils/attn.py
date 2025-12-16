@@ -13,13 +13,12 @@ def get_token_attnv2(token_id, saved_attns, attn_key, attn_aggregation_step_star
     moves to cpu by default
     """
     saved_attns = saved_attns[attn_aggregation_step_start:]    
-
     saved_attns = [saved_attn[attn_key].cpu() for saved_attn in saved_attns]
-    
+
+    # 堆叠之后取平均值
     attn = torch.stack(saved_attns, dim=0).mean(dim=0)
     
     # print("attn shape", attn.shape)
-    
     # attn: (batch, head, spatial, text)
 
     if not input_ca_has_condition_only:
@@ -28,19 +27,21 @@ def get_token_attnv2(token_id, saved_attns, attn_key, attn_aggregation_step_star
     else:
         assert attn.shape[0] == 1, f"Expect to have 1 item (cond only), but found {attn.shape[0]} items"
         attn = attn[0]
+
+    # 取出指定token_id的attn
     attn = attn.mean(dim=0)[:, token_id]
     H = W = int(math.sqrt(attn.shape[0]))
     attn = attn.reshape((H, W))
     
     if return_np:
         return attn.numpy()
-
     return attn
 
 def shift_saved_attns_item(saved_attns_item, offset, guidance_attn_keys, horizontal_shift_only=False):
     """
     `horizontal_shift_only`: only shift horizontally. If you use `offset` from `compose_latents_with_alignment` with `horizontal_shift_only=True`, the `offset` already has y_offset = 0 and this option is not needed.
     """
+    # 平移注意力项
     x_offset, y_offset = offset
     if horizontal_shift_only:
         y_offset = 0.
@@ -71,6 +72,7 @@ def shift_saved_attns(saved_attns, offset, guidance_attn_keys, **kwargs):
 
 
 class GaussianSmoothing(nn.Module):
+    # 高斯平滑
     """
     Apply gaussian smoothing on a
     1d, 2d or 3d tensor. Filtering is performed seperately for each channel

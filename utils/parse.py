@@ -1,3 +1,12 @@
+# 这段代码是边界框处理和图解可视化的工具集
+# 主要用于处理从语言模型（如ChatGPT）生成的物体布局描述，并将其转换为可用的格式。让我详细解释各部分
+
+# 这段代码主要完成以下任务：
+# 解析文本输入：从LLM（大语言模型）的响应中提取边界框信息
+# 过滤和缩放边界框：确保边界框在合理范围内
+# 可视化边界框：生成布局预览图
+# 格式转换：将边界框转换为扩散模型所需的格式
+
 import ast
 from matplotlib.patches import Polygon, Rectangle
 from matplotlib.collections import PatchCollection
@@ -25,6 +34,10 @@ print(f"Using box scale: {box_scale}")
 
 def parse_input(text=None, no_input=False):
     warnings.warn("Parsing input without negative prompt is deprecated.")
+    # 解析提示词输入，已经弃用
+    # 分离物体列表和背景描述
+    # 使用ast.literal_eval安全地将字符串转换为Python对象
+    # 处理可能的输入错误和边缘情况
 
     if not text:
         if no_input:
@@ -66,6 +79,7 @@ def parse_input(text=None, no_input=False):
 
 def parse_input_with_negative(text=None, no_input=False):
     # no_input: should not request interactive input
+    # 解析带负面提示词的输入
 
     if not text:
         if no_input:
@@ -128,6 +142,7 @@ def parse_input_with_negative(text=None, no_input=False):
 
 
 def filter_boxes(gen_boxes, scale_boxes=True, ignore_background=True, max_scale=3):
+    # 过滤和标准化边界框
     if gen_boxes is None:
         return []
 
@@ -262,6 +277,7 @@ def filter_boxes(gen_boxes, scale_boxes=True, ignore_background=True, max_scale=
 
 
 def draw_boxes(ax, anns):
+    # 可视化函数，绘制边框
     ax.set_autoscale_on(False)
     polygons = []
     color = []
@@ -302,6 +318,7 @@ def show_boxes(
     img=None,
     fname=None,
 ):
+    #  显示边界框对比
     if len(gen_boxes) == 0 and (additional_boxes is None or len(additional_boxes) == 0):
         return
 
@@ -375,6 +392,7 @@ def convert_box(box, height, width):
 
 
 def convert_spec(spec, height, width, include_counts=True, verbose=False):
+    # 将原始规格转换为扩散模型所需的格式
     # Infer from spec
     prompt, gen_boxes, bg_prompt = spec["prompt"], spec["gen_boxes"], spec["bg_prompt"]
 

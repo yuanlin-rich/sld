@@ -1,3 +1,15 @@
+# 这段代码是潜在空间合成（Latent Space Composition）的核心实现，用于在扩散模型中组合多个物体的潜在表示
+# 通过修改潜变量，可以控制物体在生成图像的位置和数量
+
+
+# 代码包含以下几个主要功能：
+# 潜在空间基础操作（生成、缩放、混合）
+# 多物体潜在表示组合
+# 边界框对齐
+# 逆变形和对齐
+# 复杂的场景组合
+
+
 import torch
 import numpy as np
 from . import utils
@@ -14,6 +26,8 @@ def get_unscaled_latents(batch_size, in_channels, height, width, generator, dtyp
     """
     in_channels: often obtained with `unet.config.in_channels`
     """
+    # 生成未缩放的潜变量
+    # 生成标准正态分布的随机噪声
     # Obtain with torch.float32 and cast to float16 if needed
     # Directly obtaining latents in float16 will lead to different latents
     latents_base = torch.randn(
@@ -28,6 +42,8 @@ def get_unscaled_latents(batch_size, in_channels, height, width, generator, dtyp
 def get_scaled_latents(
     batch_size, in_channels, height, width, generator, dtype, scheduler
 ):
+    # 生成缩放后的潜变量
+    # 根据调度器（scheduler）的初始噪声标准差缩放潜变量
     latents_base = get_unscaled_latents(
         batch_size, in_channels, height, width, generator, dtype
     )
@@ -39,6 +55,8 @@ def blend_latents(latents_bg, latents_fg, fg_mask, fg_blending_ratio=0.01):
     """
     in_channels: often obtained with `unet.config.in_channels`
     """
+    # 混合前景和背景潜变量
+    # 使用平方根混合保持能量守恒（类似alpha混合）
     assert not torch.allclose(
         latents_bg, latents_fg
     ), "latents_bg should be independent with latents_fg"
@@ -72,6 +90,7 @@ def compose_latents(
     fast_after_steps=None,
     latents_bg=None,
 ):
+    # 组合多个物体的潜变量
     unet, scheduler, dtype = model_dict.unet, model_dict.scheduler, model_dict.dtype
 
     generator = torch.manual_seed(
@@ -140,6 +159,7 @@ def align_with_bboxes(
     """
     Each offset in `offset_list` is `(x_offset, y_offset)` (normalized).
     """
+    # 根据边界框对齐潜变量
     new_latents_all_list, new_mask_tensor_list, offset_list = [], [], []
     for latents_all, mask_tensor, bbox in zip(
         latents_all_list, mask_tensor_list, bboxes
@@ -295,6 +315,13 @@ def compose_latents_with_alignment(
     bg_seed=1,
     **kwargs,
 ):
+    # 综合组合函数
+    # 这是最复杂的函数，支持多种操作：
+    # 支持的修改类型：
+    # 移动物体 (move_objects)：将物体从一个位置移动到另一个位置
+    # 更改物体 (change_objects)：替换场景中的物体
+    # 移除物体 (original_remove)：移除不需要的物体
+    # 添加新物体：将新生成的物体添加到场景
     if align_with_overall_bboxes and len(latents_all_list):
         expanded_overall_bboxes = utils.expand_overall_bboxes(overall_bboxes)
         latents_all_list, mask_tensor_list, offset_list = align_with_bboxes(

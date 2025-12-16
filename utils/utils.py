@@ -186,24 +186,32 @@ def shift_tensor(
     ignore_last_dim=False,
 ):
     """base_w and base_h: make sure the shift is aligned in the latent and multiple levels of cross attention"""
+    # ignore_last_dim决定了如何获取图像的宽度高度
+    # 可能用于注意力机制等特殊张亮
     if ignore_last_dim:
         tensor_h, tensor_w = tensor.shape[-3:-1]
     else:
         tensor_h, tensor_w = tensor.shape[-2:]
     if offset_normalized:
+        # 如果提供的偏移量是归一化的偏移量（0～1之间）
+        # 确保尺寸是基准尺寸的倍数
         assert (
             tensor_h % base_h == 0 and tensor_w % base_w == 0
         ), f"{tensor_h, tensor_w} is not a multiple of {base_h, base_w}"
         scale_from_base_h, scale_from_base_w = tensor_h // base_h, tensor_w // base_w
+
+        # 计算以像素为单位的偏移量
         x_offset, y_offset = (
             round(x_offset * base_w) * scale_from_base_w,
             round(y_offset * base_h) * scale_from_base_h,
         )
+    # 创建一个和tensor相同的全零张量
     new_tensor = torch.zeros_like(tensor)
 
     overlap_w = tensor_w - abs(x_offset)
     overlap_h = tensor_h - abs(y_offset)
 
+    # 计算偏移的起点，终点
     if y_offset >= 0:
         y_src_start = 0
         y_dest_start = y_offset
@@ -218,6 +226,7 @@ def shift_tensor(
         x_src_start = -x_offset
         x_dest_start = 0
 
+    # 完成偏移
     if ignore_last_dim:
         # For cross attention maps, the third to last and the second to last are the 2D dimensions after unflatten.
         new_tensor[

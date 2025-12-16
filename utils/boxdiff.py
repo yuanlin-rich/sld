@@ -4,6 +4,10 @@ This is an reimplementation boxdiff baseline for reference and comparison. It is
 Credit: https://github.com/showlab/BoxDiff/blob/master/pipeline/sd_pipeline_boxdiff.py
 """
 
+# box diff 算法的重新实现
+# 用于基于边界框的空间注意力控制，是扩散模型中一种空间控制技术
+# 用于将物体控制在指定的框内
+
 import torch
 import torch.nn.functional as F
 import math
@@ -28,10 +32,11 @@ def _compute_max_attention_per_index(attention_maps: torch.Tensor,
                                      L: int = 1,
                                      ) -> List[torch.Tensor]:
     """ Computes the maximum attention value for each of the tokens we wish to alter. """
+    # 计算box diff的四种约束
     last_idx = -1
     assert not normalize_eot, "normalize_eot is unimplemented"
 
-    attention_for_text = attention_maps[:, :, 1:last_idx]
+    attention_for_text = attention_maps[:, :, 1 : last_idx]
     attention_for_text *= 100
     attention_for_text = F.softmax(attention_for_text, dim=-1)
 
@@ -104,6 +109,7 @@ def _compute_max_attention_per_index(attention_maps: torch.Tensor,
 def _compute_loss(max_attention_per_index_fg: List[torch.Tensor], max_attention_per_index_bg: List[torch.Tensor],
                   dist_x: List[torch.Tensor], dist_y: List[torch.Tensor], return_losses: bool = False) -> torch.Tensor:
     """ Computes the attend-and-excite loss using the maximum attention value for each token. """
+    # 总损失 = 内框损失 + 外框损失 + X角点损失 + Y角点损失
     losses_fg = [max(0, 1. - curr_max)
                  for curr_max in max_attention_per_index_fg]
     losses_bg = [max(0, curr_max) for curr_max in max_attention_per_index_bg]
@@ -118,6 +124,7 @@ def _compute_loss(max_attention_per_index_fg: List[torch.Tensor], max_attention_
 
 
 def compute_ca_loss_boxdiff(saved_attn, bboxes, object_positions, guidance_attn_keys, ref_ca_saved_attns=None, ref_ca_last_token_only=True, ref_ca_word_token_only=False, word_token_indices=None, index=None, ref_ca_loss_weight=1.0, verbose=False, **kwargs):
+
     """
     v3 is equivalent to v2 but with new dictionary format for attention maps.
     The `saved_attn` is supposed to be passed to `save_attn_to_dict` in `cross_attention_kwargs` prior to computing ths loss.
@@ -127,6 +134,7 @@ def compute_ca_loss_boxdiff(saved_attn, bboxes, object_positions, guidance_attn_
     `ref_ca_word_token_only`: This has precedence over `ref_ca_last_token_only` (i.e., if both are enabled, we take the token from word rather than the last token).
     `ref_ca_last_token_only`: `ref_ca_saved_attn` comes from the attention map of the last token of the phrase in single object generation, so we apply it only to the last token of the phrase in overall generation if this is set to True. If set to False, `ref_ca_saved_attn` will be applied to all the text tokens.
     """
+    # 集成多个注意力层的损失
     loss = torch.tensor(0).float().cuda()
     object_number = len(bboxes)
     if object_number == 0:
