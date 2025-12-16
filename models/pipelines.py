@@ -1,3 +1,12 @@
+# 扩散模型生成流程的核心实现，包含了多种生成和编辑策略。让我详细解释各部分：
+# 整体架构
+# 代码实现了多种生成和编辑功能：
+# 基础生成 (generate)
+# 语义引导生成 (generate_semantic_guidance) - 注意力引导
+# GLIGEN生成 (generate_gligen) - 空间条件生成
+# 反演 (invert) - 图像到潜变量
+# 部分冻结生成 - 保护性编辑
+
 import torch
 from tqdm import tqdm
 from utils import guidance, schedule, boxdiff
